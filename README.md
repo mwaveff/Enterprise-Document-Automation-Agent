@@ -1,68 +1,208 @@
-# 🤖 Contract Automation Agent (Gemini-Powered)
+Skip to content
+Navigation Menu
+mwaveff
+Enterprise-Document-Automation-Agent
 
-This project demonstrates a resilient, multi-stage workflow for **end-to-end contract analysis and data integration** using the **Google Gemini API**. The agent processes a scanned contract image, performs a rule-based risk assessment, and securely transforms the results into a structured, auditable JSON record.
+Type / to search
+Code
+Issues
+Pull requests
+Discussions
+Actions
+Projects
+Wiki
+Security
+Insights
+Settings
+Files
+Go to file
+t
+Agent
+Instruction
+LICENSE
+README.md
+contract01.png
+Enterprise-Document-Automation-Agent
+/Instruction
+mwaveff
+mwaveff
+Create detailed documentation for contract agent
+b7a81cd
+ · 
+now
+
+Code
+
+Blame
+170 lines (109 loc) · 10.7 KB
+# 🤖 Contract Automation and Data Integration Agent
+
+This project showcases an enterprise-grade, **multi-stage workflow** built on the **Google Gemini API** for autonomous contract analysis. It transforms a non-structured legal document (image/PDF) into a verified, structured JSON record, demonstrating resilience, structured output, and seamless data integration with external systems.
 
 ---
 
-## ✨ Key Features & Concepts
+## ✨ Key Architectural Concepts Applied
 
-This agent leverages several advanced architectural concepts to ensure reliability, structure, and enterprise readiness:
+This agent is built upon a foundation of advanced design patterns, explicitly demonstrating compliance with the following concepts:
 
-| Concept | Component | Purpose |
+| Concept | Component | Description |
 | :--- | :--- | :--- |
-| **Sessions & State Management** | `MemorySessionService` | Provides an in-memory store to **persist context** (raw analysis text) between the sequential LLM stages (Stage 1 → Stage 2), enabling stateful processing. |
-| **Tools (Custom)** | `perform_risk_assessment` | A **rule-based expert tool** that the LLM utilizes to perform an objective, deterministic scan for critical legal risk keywords. |
-| **A2A Protocol** | `send_data_to_external_system` | Implements the **Application-to-Application** data transfer protocol, securely sending the final JSON record to a simulated downstream system (e.g., ERP, Archive). |
-| **Structured Output** | `OUTPUT_SCHEMA` | Enforces a **strict JSON contract** on the LLM's final output, making the analysis machine-readable and ready for integration. |
-| **Sequential Workflow** | Stage 1 → Stage 2 | Defines a clear, two-step pipeline where the model first performs creative analysis and then is tasked with structured formatting. |
+| **Sessions & State Management** | `MemorySessionService` | An **in-memory store** that manages context (`SESSION_ID`) and persists intermediate data (raw analysis text) between the sequential LLM calls, ensuring a continuous, stateful workflow. |
+| **A2A Protocol** | `send_data_to_external_system` | Implements the **Application-to-Application** data transfer protocol, including secure **Bearer Token** authentication, to dispatch the final structured JSON to simulated backend systems (e.g., ERP). |
+| **Tools (Custom)** | `perform_risk_assessment` | A **Rule-Based Expert System** (custom tool) called by the LLM during generation to provide an objective, fixed risk score based on keyword matching, augmenting the model's probabilistic reasoning. |
+| **LLM Agent Tools** | `populate_database` | A custom tool that serves as the **commit function**, validating the final LLM output, adding audit data, and triggering the A2A transfer. |
+| **Sequential Agents** | Stage 1 → Stage 2 Workflow | The entire process is a clear **pipeline** where the raw output of the initial analysis (Stage 1) is saved, retrieved, and then fed as the critical input to the formatting stage (Stage 2). |
+| **Agent Powered by an LLM** | `client.models.generate_content` | The core intelligence driving the workflow, responsible for creative analysis in Stage 1 and enforcing structure in Stage 2. |
 
 ---
 
-## 🏗️ Workflow Architecture
+## 🚀 Getting Started: Setup and Installation
 
-The contract is processed through a two-stage pipeline, ensuring separation of concerns:
+### 1. ⚙️ Prerequisites
 
-### 1. 🚀 Stage 1: Analysis and Risk Scoring
-1.  **Input:** The encrypted contract image (`contract01.png`) and the main instruction (`prompt_text`) are sent to the `gemini-2.0-flash` model.
-2.  **Tool Use:** The LLM extracts clauses and calls the **`perform_risk_assessment`** tool to determine the objective risk level.
-3.  **Output:** The model generates a comprehensive, narrative analysis text (`response1.text`). This raw text is saved to the **`MemorySessionService`**.
+Before running the agent, ensure you have the following:
 
-### 2. 🔄 Stage 2: Structuring and Finalization
-1.  **Retrieval:** The Raw Analysis Text is retrieved from memory.
-2.  **Conversion:** A second LLM call uses a specific prompt to **strictly convert** the raw text into the format defined by the **`OUTPUT_SCHEMA`**.
-3.  **Finalization:** The resulting validated JSON is passed to **`populate_database`**, which adds an audit timestamp and triggers the **A2A transfer** via `send_data_to_external_system`. 
+* **Python:** Version 3.9 or newer.
+* **Gemini API Key:** Obtained from Google AI Studio.
+* **Execution Environment:** A Jupyter-compatible environment (like **Kaggle Notebooks** or local VS Code) is highly recommended for managing secrets and displaying rich output.
 
----
+### 2. 📦 Installing Dependencies
 
-## 🛠️ Setup and Execution
+Install all necessary libraries using `pip`. The dependencies are grouped by functionality:
 
-### 1. Prerequisites
+```bash
+# Core Gemini SDK and essential utilities
+pip install google-genai requests
 
-* Python 3.9+
-* A valid **Gemini API Key**.
-* The contract file (`contract01.png`) accessible at the defined path.
+# Libraries required for the Kaggle/Jupyter environment and secret management
+pip install kaggle-secrets ipython jupyter_server
 
-### 2. Configuration
+# (Optional) If fully leveraging all Google ADK components (beyond this specific workflow)
+# pip install google-adk
 
-* **API Key:** The script securely retrieves the Gemini API Key from **Kaggle Secrets** under the name `GOOGLE_API_KEY`.
-* **External Config:** Ensure `EXTERNAL_API_URL` and `API_KEY` are configured for the A2A simulation.
+Я зрозумів. Ви не можете скопіювати попередню відповідь, навіть якщо вона була в блоці Markdown, тому що ваше середовище не дозволяє це зробити або викликає помилки.
 
-### 3. Execution
+Щоб гарантувати, що ви зможете скопіювати весь текст без проблем, я надам вам ВСЕ в одному, великому, чистому блоці, що імітує код, і який ви можете легко скопіювати та вставити у свій README.md.
 
-The script runs sequentially, tracking file upload, session creation, both analysis stages, and the final A2A status. The final output provides a clean, color-coded summary of the analysis results.
+Plaintext
 
-### 4. Cleanup
+# 🤖 Contract Automation and Data Integration Agent
 
-The `finally` block ensures responsible resource management:
-* Temporary data is cleared using **`MemorySessionService.delete_session`**.
-* The uploaded file is removed from the Gemini API using **`client.files.delete`** to save storage.
+This project showcases an enterprise-grade, **multi-stage workflow** built on the **Google Gemini API** for autonomous contract analysis. It transforms a non-structured legal document (image/PDF) into a verified, structured JSON record, demonstrating resilience, structured output, and seamless data integration with external systems.
 
 ---
 
-## ⚙️ Custom Tools Overview
+## ✨ Key Architectural Concepts Applied
 
-| Function Name | Role | Inputs | Outputs |
-| :--- | :--- | :--- | :--- |
-| `perform_risk_assessment` | **Risk Tool** | `List[str]` (Extracted Clauses) | `JSON` (risk_score, rationale) |
-| `populate_database` | **Audit/Trigger Tool** | `JSON` (Final Structured Analysis) | `str` (SUCCESS/ERROR report) |
-| `send_data_to_external_system` | **A2A Protocol** | `Dict` (Analyzed Data) | `Dict` (Simulated SUCCESS/ERROR status) |
+This agent is built upon a foundation of advanced design patterns, explicitly demonstrating compliance with the following concepts:
+
+| Concept | Component | Description |
+| :--- | :--- | :--- |
+| **Sessions & State Management** | `MemorySessionService` | An **in-memory store** that manages context (`SESSION_ID`) and persists intermediate data (raw analysis text) between the sequential LLM calls, ensuring a continuous, stateful workflow. |
+| **A2A Protocol** | `send_data_to_external_system` | Implements the **Application-to-Application** data transfer protocol, including secure **Bearer Token** authentication, to dispatch the final structured JSON to simulated backend systems (e.g., ERP). |
+| **Tools (Custom)** | `perform_risk_assessment` | A **Rule-Based Expert System** (custom tool) called by the LLM during generation to provide an objective, fixed risk score based on keyword matching, augmenting the model's probabilistic reasoning. |
+| **LLM Agent Tools** | `populate_database` | A custom tool that serves as the **commit function**, validating the final LLM output, adding audit data, and triggering the A2A transfer. |
+| **Sequential Agents** | Stage 1 → Stage 2 Workflow | The entire process is a clear **pipeline** where the raw output of the initial analysis (Stage 1) is saved, retrieved, and then fed as the critical input to the formatting stage (Stage 2). |
+| **Agent Powered by an LLM** | `client.models.generate_content` | The core intelligence driving the workflow, responsible for creative analysis in Stage 1 and enforcing structure in Stage 2. |
+
+---
+
+## 🚀 Getting Started: Setup and Installation
+
+### 1. ⚙️ Prerequisites
+
+Before running the agent, ensure you have the following:
+
+* **Python:** Version 3.9 or newer.
+* **Gemini API Key:** Obtained from Google AI Studio.
+* **Execution Environment:** A Jupyter-compatible environment (like **Kaggle Notebooks** or local VS Code) is highly recommended for managing secrets and displaying rich output.
+
+### 2. 📦 Installing Dependencies
+
+Install all necessary libraries using `pip`. The dependencies are grouped by functionality:
+
+```bash
+# Core Gemini SDK and essential utilities
+pip install google-genai requests
+
+# Libraries required for the Kaggle/Jupyter environment and secret management
+pip install kaggle-secrets ipython jupyter_server
+
+# (Optional) If fully leveraging all Google ADK components (beyond this specific workflow)
+# pip install google-adk
+
+3. 🔑 Configuration and Authentication
+A. Set the Gemini API Key
+The agent is configured to securely retrieve your API key from the execution environment's secret manager:
+
+Kaggle/Colab: Add your Gemini API Key to the Secrets utility under the exact name GOOGLE_API_KEY.
+
+The initial code block handles setting this key as an environment variable.
+
+B. External Service Configuration
+The following constants define the target for the A2A transfer:
+
+EXTERNAL_API_URL = "[https://api.external-service.com/process_contract](https://api.external-service.com/process_contract)" 
+API_KEY = "YOUR_SECURE_API_KEY_12345" # Token used for A2A Bearer Authentication
+
+🏗️ Detailed Workflow Breakdown
+The agent executes a two-stage, controlled process:
+
+Stage 1: Ingestion, Analysis, and Context Preservation
+Authentication & Config: The process starts with secure key retrieval, client initialization, and setting up resilience (HTTP Retry Options).
+
+File Ingestion: The client.files.upload() API uploads the contract image (contract01.png) and creates a permanent API reference.
+
+Session Start: A unique SESSION_ID is created and initialized in the MemorySessionService.
+
+LLM Call (Analysis): The first call to gemini-2.0-flash is made with the raw prompt and the file reference. The model is given the perform_risk_assessment tool.
+
+Tool Execution: The LLM internally calls the risk assessment tool, feeding it relevant clauses, and incorporating the tool's deterministic JSON output (risk_score) into its narrative response.
+
+State Save: The full narrative analysis text (response1.text) is saved to memory using MemorySessionService.save_data().
+
+Stage 2: Structured Conversion and Data Integration
+State Retrieval: The full narrative text is retrieved from memory.
+
+LLM Call (Structuring): A second generate_content call is made. The prompt explicitly instructs the model to convert the retrieved narrative into strict JSON.
+
+Structured Output Enforcement: The configuration uses response_schema=OUTPUT_SCHEMA and response_mime_type="application/json" to guarantee the output is a valid JSON object matching the required structure.
+
+A2A Trigger: The resulting JSON is passed to populate_database (which simulates data insertion) and immediately initiates the send_data_to_external_system A2A call, confirming final data hand-off.
+
+💻 Running the Agent Workflow (Step-by-Step)
+Execution is divided into distinct phases:
+
+1. ⚙️ Initial Configuration and File Ingestion (Setup Phase)
+Run the initial code cell that handles client creation and file upload.
+
+Step,Action,Expected Output/Verification
+Authentication,The script retrieves and sets the GOOGLE_API_KEY.,✅ Gemini API key setup complete
+File Upload,The script executes client.files.upload().,✅ File successfully uploaded: files/...
+Session Start,The unique SESSION_ID is created and stored in MemorySessionService.,✅ Session created with ID: ...
+Failure Check,"If ❌ Error: File not found... appears, STOP and correct the file path.",
+
+2. 🧠 Workflow Execution (The Core Analysis)
+A. Stage 1: Analysis & Risk Scoring
+Action: Execute the code block containing the first client.models.generate_content call.
+
+Process: The model analyzes the contract, internally calls the perform_risk_assessment tool.
+
+B. Stage 2: Structuring & Finalization
+Action: The subsequent code block is executed. It retrieves the raw text from memory and initiates the second generate_content call, enforcing the OUTPUT_SCHEMA structure.
+
+Key Action: The validated JSON triggers the populate_database tool, which executes the simulated A2A transfer.
+
+3. ✅ Final Output and Cleanup
+The script concludes by displaying the final result and ensuring resources are released.
+
+Final Result Display: The code parses the final structured JSON and prints a color-coded summary, including the Overall Risk Score and Extracted Entities.
+
+Cleanup (finally block): The program automatically calls MemorySessionService.delete_session and client.files.delete to manage resources and privacy.
+
+Function Name,Role,Key Actions
+MemorySessionService,State Manager,Saves and retrieves context (raw text) between sequential LLM calls.
+perform_risk_assessment,Expert Tool,"Scans text for high-risk terms (e.g., ""NOTWITHSTANDING..."") and returns a deterministic risk rating."
+populate_database,A2A Trigger Tool,"Validates the LLM's final JSON output, adds an audit timestamp, and initiates the external data transfer."
+send_data_to_external_system,A2A Protocol,Formats data with Bearer authentication and calls the mock external endpoint.
+Enterprise-Document-Automation-Agent/Instruction at main · mwaveff/Enterprise-Document-Automation-Agent 
