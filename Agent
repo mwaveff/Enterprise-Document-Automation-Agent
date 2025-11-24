@@ -1,3 +1,15 @@
+'''
+Enterprise Document Automation Agent
+    This enterprise-ready document automation agent ingests complex documents like PDFs and contracts to extract key data, populate a structured database,
+    perform risk analysis on terms and penalties, and generate a finalized document or summary report.
+Configuration
+    Install dependencies: image.png
+    If you are using Google ADK components specifically:
+    pip install google-adk
+    You might also need requests and packages for Jupyter/Kaggle if using them outside this script:
+    pip install requests ipython jupyter_server
+'''
+
 import os
 import time
 import json
@@ -26,6 +38,14 @@ from google.genai.types import (
     Schema,
     Type
 )
+
+'''
+Initialization Block Description
+    Authentication: Securely retrieves and sets the Gemini API Key from Kaggle Secrets.
+    Configuration: Defines external A2A (Application-to-Application) endpoints and configures an HTTP Retry Policy for reliability.
+    Ingestion & Context: Initializes the genai.Client, uploads the contract file to the API, and creates a unique Session ID for the MemorySessionService
+    to track context across the entire analysis workflow.
+'''
 
 try:
     GOOGLE_API_KEY = UserSecretsClient().get_secret("GOOGLE_API_KEY")
@@ -63,6 +83,17 @@ except FileNotFoundError:
     raise
 except Exception as e:
     print(f"❌ An error occurred during file upload or session setup: {e}")
+
+'''
+Core Functionality
+It uses a static dictionary, _storage, to hold temporary data associated with a unique Session ID (like the ID of the processed document).
+Purpose: To manage and share context (intermediate results, statuses, etc.) between the different, separate steps of your document processing workflow.
+Key Methods:
+    create_session: Starts a new context space.
+    save_data / get_data: Stores and retrieves specific pieces of information within that context.
+    delete_session: Cleans up the stored data after the workflow is complete.
+'''
+
 class MemorySessionService:
     _storage: Dict[str, Dict[str, Any]] = {}
 
@@ -89,6 +120,13 @@ class MemorySessionService:
         return cls._storage
 
 print("✅ MemorySessionService loaded successfully")
+
+'''
+The OUTPUT_SCHEMA
+    The OUTPUT_SCHEMA (using the GenAI SDK's Schema objects) acts as a strict contract that compels the Large Language Model (LLM) to return its entire analysis in
+    a predictable, nested JSON format. 
+    This is crucial for down-stream processing (like the populate_database and A2A functions).
+'''
 
 OUTPUT_SCHEMA = Schema(
     type=Type.OBJECT,
@@ -145,6 +183,12 @@ prompt_text = (
 
 print("✅ OutputShema loaded successfully")
 
+'''
+Function mock_external_api_call
+    The function is a placeholder designed to simulate the behavior of a real, external A2A (Application-to-Application) API service. 
+    It allows the core workflow to be tested and validated without actually sending data to a live, production endpoint.
+'''
+
 def mock_external_api_call(data: Dict[str, Any]) -> Dict[str, Any]:
     print(f"[{time.strftime('%H:%M:%S')}] 🔄 A2A: External service received request.")
     document_id = data.get("DocumentMetadata", {}).get("DocumentID", "N/A")
@@ -161,6 +205,12 @@ def mock_external_api_call(data: Dict[str, Any]) -> Dict[str, Any]:
     return response_data
 
 print("✅ Mock_external_api_call loaded successfully")
+
+'''
+Function send_data_to_external_system
+    This function implements the Application-to-Application (A2A) protocol within your bot, acting as the final data transfer step after the contract analysis is complete. 
+    Its purpose is to prepare the analyzed JSON data and send it to an external system (like an archiving database or an ERP system).
+'''
 
 def send_data_to_external_system(json_data: str) -> str:
     headers = {
@@ -184,6 +234,13 @@ def send_data_to_external_system(json_data: str) -> str:
         return f"A2A INTERNAL ERROR: {str(e)}"
 
 print("✅ Send_data_to_external_system loaded successfully")
+
+'''
+Function perform_risk_assessment
+    The function serves as a rule-based expert system that automatically scans a list of extracted contract clauses for predefined legal risk keywords. 
+    It returns a structured JSON object containing the overall risk level and a rationale.
+    This function is designed to be called by the Large Language Model (LLM) as a tool during the analysis phase to provide an objective, immediate risk rating.
+'''
 
 def perform_risk_assessment(extracted_clauses: List[str]) -> str:
     if not extracted_clauses:
@@ -228,6 +285,15 @@ def perform_risk_assessment(extracted_clauses: List[str]) -> str:
 
 print("✅ Perform_risk_assessment loaded successfully")
 
+'''
+Function populate_database
+Core Functionality:
+    Input Parsing and Validation
+    Data Enrichment and Simulation
+    A2A Integration
+    Status Reporting
+'''
+
 def populate_database(json_data: str) -> str:
     try:
         data = json.loads(json_data)
@@ -256,6 +322,26 @@ def populate_database(json_data: str) -> str:
         return f"ERROR: Database operation failed - {str(e)}"
 
 print("✅ Populate_database loaded successfully")
+
+'''
+Multi-Stage Workflow Execution
+Stage 1: Document Processing and Tool Use:
+    Model Call: The client.models.generate_content is called with the model (gemini-2.0-flash), the prompt_text, and the uploaded_file reference.
+    Tool Integration: The model is configured with two tools (perform_risk_assessment, populate_database). This allows the model to internally call the perform_risk_assessment function to get a real-time, rule-based risk score while generating the overall analysis.
+    Context Preservation: The textual analysis result (response1.text) is immediately saved to the MemorySessionService using the unique SESSION_ID. This ensures the result is persisted for the next stage.
+    Delay: A time.sleep(5) pause is added, often used in multi-stage workflows to allow time for the API to fully process and log the intermediate result.
+Stage 2: JSON Conversion and Finalization:
+    Retrieval: The raw analysis is retrieved from memory using MemorySessionService.get_data().
+    Conversion Prompt: A new prompt (conversion_prompt) is generated, instructing the model to take the retrieved stage1_text and convert it strictly according to the defined OUTPUT_SCHEMA.
+    Structured Output.
+    Parsing and Display.
+    Error Reporting.
+    Final Status.
+Cleanup (finally Block):
+    Session Deletion.
+    File Deletion.
+    Graceful Exit.
+'''
 
 try:
     print("🔄 Stage 1: Starting Document Automation Agent with functions")
