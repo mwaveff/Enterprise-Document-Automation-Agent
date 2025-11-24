@@ -67,7 +67,7 @@ retry_config = HttpRetryOptions(
 )
 
 client = genai.Client()
-file_path = "/kaggle/input/contract/contract01.png"
+file_path = "/CONTRACT01.png"
 uploaded_file = None 
 
 try:
