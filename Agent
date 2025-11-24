@@ -1,0 +1,396 @@
+import os
+import time
+import json
+import datetime
+from typing import List, Dict, Any, Optional
+
+
+import requests
+from kaggle_secrets import UserSecretsClient 
+from IPython.core.display import display, HTML 
+from jupyter_server.serverapp import list_running_servers 
+
+
+from google.adk.agents import Agent
+from google.adk.models.google_llm import Gemini
+from google.adk.runners import InMemoryRunner
+from google.adk.tools import google_search
+
+
+from google import genai
+from google.genai import types
+from google.genai.types import (
+    File,
+    GenerateContentConfig,
+    HttpRetryOptions,
+    Schema,
+    Type
+)
+
+try:
+    GOOGLE_API_KEY = UserSecretsClient().get_secret("GOOGLE_API_KEY")
+    os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY
+    print("✅ Gemini API key setup complete")
+except ImportError:
+    print("❌ Kaggle Secrets not available. Ensure you're in a Kaggle Notebook")
+except KeyError:
+    print("❌ Authentication Error: Add 'GOOGLE_API_KEY' to Kaggle secrets")
+
+EXTERNAL_API_URL = "https://api.external-service.com/process_contract"
+API_KEY = "YOUR_SECURE_API_KEY_12345"
+
+retry_config = HttpRetryOptions(
+    attempts=5,
+    exp_base=2,
+    initial_delay=1,
+    http_status_codes=[429, 500, 503, 504]
+)
+
+client = genai.Client()
+file_path = "/kaggle/input/contract/contract01.png"
+uploaded_file = None 
+
+try:
+    uploaded_file = client.files.upload(file=file_path)
+    print(f"✅ File successfully uploaded: {uploaded_file.name}")
+    
+    SESSION_ID = uploaded_file.name.split('/')[-1]
+    MemorySessionService.create_session(SESSION_ID)
+    print(f"✅ Session created with ID: {SESSION_ID}")
+
+except FileNotFoundError:
+    print(f"❌ Error: File not found at path {file_path}. Check the path.")
+    raise
+except Exception as e:
+    print(f"❌ An error occurred during file upload or session setup: {e}")
+class MemorySessionService:
+    _storage: Dict[str, Dict[str, Any]] = {}
+
+    @classmethod
+    def create_session(cls, session_id: str) -> None:
+        if session_id not in cls._storage:
+            cls._storage[session_id] = {"created_at": time.time(), "data": {}}
+
+    @classmethod
+    def save_data(cls, session_id: str, key: str, value: Any) -> None:
+        if session_id in cls._storage:
+            cls._storage[session_id]["data"][key] = value
+
+    @classmethod
+    def get_data(cls, session_id: str, key: str) -> Optional[Any]:
+        return cls._storage.get(session_id, {}).get("data", {}).get(key)
+
+    @classmethod
+    def delete_session(cls, session_id: str) -> None:
+        cls._storage.pop(session_id, None)
+
+    @classmethod
+    def list_sessions(cls) -> Dict[str, Any]:
+        return cls._storage
+
+print("✅ MemorySessionService loaded successfully")
+
+OUTPUT_SCHEMA = Schema(
+    type=Type.OBJECT,
+    properties={
+        "DocumentMetadata": Schema(
+            type=Type.OBJECT, 
+            properties={
+                "DocumentID": Schema(type=Type.STRING, description="Auto-generated document ID"),
+                "DocumentType": Schema(type=Type.STRING, description="Contract type classification"),
+                "ProcessingDate": Schema(type=Type.STRING, description="ISO timestamp of analysis")
+            },
+            required=["DocumentID", "DocumentType"]
+        ),
+        "RiskAnalysisModule": Schema(
+            type=Type.OBJECT, 
+            properties={
+                "OverallRiskScore": Schema(
+                    type=Type.STRING, 
+                    enum=["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+                    description="Final risk assessment score"
+                ),
+                "RiskRationale": Schema(type=Type.STRING, description="Explanation of risk score"),
+                "KeyRiskClauses": Schema(
+                    type=Type.ARRAY, 
+                    items=Schema(type=Type.STRING),
+                    description="List of identified high-risk clauses"
+                ),
+                "ComplianceStatus": Schema(type=Type.STRING, description="Overall compliance status")
+            },
+            required=["OverallRiskScore", "RiskRationale", "KeyRiskClauses"]
+        ),
+        "SummaryReport": Schema(
+            type=Type.STRING, 
+            description="Comprehensive narrative summary from STAGE 4"
+        ),
+        "ExtractedEntities": Schema(
+            type=Type.OBJECT,
+            properties={
+                "Parties": Schema(type=Type.ARRAY, items=Schema(type=Type.STRING)),
+                "EffectiveDate": Schema(type=Type.STRING),
+                "KeyTerms": Schema(type=Type.ARRAY, items=Schema(type=Type.STRING))
+            }
+        )
+    },
+    required=["DocumentMetadata", "RiskAnalysisModule", "SummaryReport"]
+)
+
+prompt_text = (
+    "Execute a four-stage workflow for end-to-end document automation on the provided contract file, ensuring "
+    "to analyze terms and penalties and perform a real-time risk assessment. "
+    "The final output must be the structured JSON data and a Summary Report adhering to the following workflow:\n\n"
+    "**STAGE 1: Document Ingestion and Pre-processing**..."
+)
+
+print("✅ OutputShema loaded successfully")
+
+def mock_external_api_call(data: Dict[str, Any]) -> Dict[str, Any]:
+    print(f"[{time.strftime('%H:%M:%S')}] 🔄 A2A: External service received request.")
+    document_id = data.get("DocumentMetadata", {}).get("DocumentID", "N/A")
+    risk_score = data.get("RiskAnalysisModule", {}).get("OverallRiskScore", "UNKNOWN")
+    
+    time.sleep(1) 
+    
+    response_data = {
+        "status": "SUCCESS",
+        "message": f"Document {document_id} processed successfully.",
+        "processed_risk": risk_score,
+        "external_ref_id": f"EXT-{int(time.time())}"
+    }
+    return response_data
+
+print("✅ Mock_external_api_call loaded successfully")
+
+def send_data_to_external_system(json_data: str) -> str:
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {API_KEY}",
+        "X-App-Source": "ContractAutomationBot"
+    }
+    
+    try:
+        data = json.loads(json_data)
+        external_result = mock_external_api_call(data)
+        
+        if external_result.get("status") == "SUCCESS":
+            return f"A2A SUCCESS: External service confirmed processing. Ref ID: {external_result['external_ref_id']}"
+        else:
+            return f"A2A ERROR: External service returned an error: {external_result.get('message', 'Unknown error')}"
+            
+    except json.JSONDecodeError:
+        return "A2A ERROR: Invalid JSON for sending."
+    except Exception as e:
+        return f"A2A INTERNAL ERROR: {str(e)}"
+
+print("✅ Send_data_to_external_system loaded successfully")
+
+def perform_risk_assessment(extracted_clauses: List[str]) -> str:
+    if not extracted_clauses:
+        return json.dumps({
+            "risk_score": "LOW", 
+            "rationale": "No clauses provided for analysis"
+        })
+    
+    try:
+        high_risk_keywords = ["NOTWITHSTANDING CLIENT'S OWN NEGLIGENCE", "PENALTY EXCEEDS 10%"]
+        medium_risk_keywords = ["LIMITATION OF LIABILITY", "INDEMNIFICATION"]
+        
+        risk_level = "LOW"
+        found_risks = []
+        
+        for clause in extracted_clauses:
+            clause_upper = clause.upper()
+            if any(keyword in clause_upper for keyword in high_risk_keywords):
+                risk_level = "CRITICAL"
+                found_risks.append(clause[:100] + "...")
+            elif risk_level != "CRITICAL" and any(keyword in clause_upper for keyword in medium_risk_keywords):
+                risk_level = "MEDIUM"
+                found_risks.append(clause[:100] + "...")
+        
+        rationale = (
+            f"Critical risk clauses found: {found_risks}" 
+            if risk_level == "CRITICAL" 
+            else "Standard risk assessment completed"
+        )
+        
+        return json.dumps({
+            "risk_score": risk_level, 
+            "rationale": rationale,
+            "analyzed_clauses_count": len(extracted_clauses)
+        })
+        
+    except Exception as e:
+        return json.dumps({
+            "risk_score": "UNKNOWN", 
+            "rationale": f"Risk assessment error: {str(e)}"
+        })
+
+print("✅ Perform_risk_assessment loaded successfully")
+
+def populate_database(json_data: str) -> str:
+    try:
+        data = json.loads(json_data)
+        
+        required_fields = ["DocumentMetadata", "RiskAnalysisModule"]
+        for field in required_fields:
+            if field not in data:
+                return f"ERROR: Missing required field '{field}'"
+        
+        doc_id = data["DocumentMetadata"].get("DocumentID", "N/A")
+        risk_score = data["RiskAnalysisModule"].get("OverallRiskScore", "UNKNOWN")
+        
+        print(f"📊 Inserting document {doc_id} with risk score: {risk_score}")
+        
+        data["ProcessingTimestamp"] = datetime.datetime.now().isoformat()
+        
+        print(f"➡️ Starting A2A transfer for document {doc_id}...")
+        a2a_result = send_data_to_external_system(json.dumps(data))
+        print(f"🎉 A2A Status: {a2a_result}")
+
+        return f"SUCCESS: Record {doc_id} saved. Risk: {risk_score}. A2A Result: {a2a_result}"
+        
+    except json.JSONDecodeError as e:
+        return f"ERROR: Invalid JSON - {str(e)}"
+    except Exception as e:
+        return f"ERROR: Database operation failed - {str(e)}"
+
+print("✅ Populate_database loaded successfully")
+
+try:
+    print("🔄 Stage 1: Starting Document Automation Agent with functions")
+    print(f"📝 Prompt length: {len(prompt_text)}")
+    
+    response1 = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=[prompt_text, uploaded_file],
+        config=GenerateContentConfig(
+            tools=[perform_risk_assessment, populate_database]
+        )
+    )
+    
+    print("✅ Stage 1 completed successfully!")
+    
+    if hasattr(response1, 'text'):
+        MemorySessionService.save_data(SESSION_ID, "stage1_analysis_text", response1.text)
+    print(f"📄 Response1 text length: {len(response1.text)}")
+
+    time.sleep(5) 
+    
+    print("🔄 Stage 2: Converting result to JSON")
+
+    stage1_text = MemorySessionService.get_data(SESSION_ID, "stage1_analysis_text") or 'No analysis available'
+    print(f"🧠 Retrieved Stage 1 text (length: {len(stage1_text)}) from session {SESSION_ID}")
+
+    conversion_prompt = f"""
+    Convert the following contract analysis to strict JSON format according to the schema:
+
+    CONTRACT ANALYSIS:
+    {stage1_text}
+
+    JSON REQUIREMENTS:
+    ...
+    """
+    
+    response2 = client.models.generate_content(
+        model="gemini-2.0-flash", 
+        contents=conversion_prompt,
+        config=GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=OUTPUT_SCHEMA
+        )
+    )
+    
+    print("✅ Stage 2 completed")
+    
+    print(f"📊 Response2 type: {type(response2)}")
+    if hasattr(response2, 'text'):
+        print(f"📄 Response2 text length: {len(response2.text)}")
+    else:
+        print("❌ Response2 has no 'text' attribute")
+        print(f"📋 Response2 attributes: {dir(response2)}")
+    
+    print("\n✅ ANALYSIS COMPLETED")
+    
+    if response2 and hasattr(response2, 'text') and response2.text:
+        print("\n🎯 CONTRACT ANALYSIS RESULTS:")
+        print("=" * 50)
+        
+        try:
+            result = json.loads(response2.text)
+            
+            metadata = result.get('DocumentMetadata', {})
+            risk_module = result.get('RiskAnalysisModule', {})
+            
+            print(f"📄 Document type: {metadata.get('DocumentType', 'Unknown')}")
+            print(f"🆔 Document ID: {metadata.get('DocumentID', 'None')}")
+            print(f"📅 Processed: {metadata.get('ProcessingDate', 'Unknown')}")
+            print()
+            
+            risk_score = risk_module.get('OverallRiskScore', 'UNKNOWN')
+            risk_color = {
+                'LOW': '🟢', 
+                'MEDIUM': '🟡', 
+                'HIGH': '🟠', 
+                'CRITICAL': '🔴'
+            }.get(risk_score, '⚪')
+            
+            print(f"{risk_color} Risk level: {risk_score}")
+            print(f"📝 Rationale: {risk_module.get('RiskRationale', 'None')}")
+            print(f"🏛️ Compliance status: {risk_module.get('ComplianceStatus', 'Unknown')}")
+            print()
+            
+            risk_clauses = risk_module.get('KeyRiskClauses', [])
+            if risk_clauses:
+                print(f"🔍 Risk clauses identified: {len(risk_clauses)}")
+                for i, clause in enumerate(risk_clauses, 1):
+                    print(f"    {i}. {clause}")
+            else:
+                print("🔍 No risk clauses identified")
+            print()
+
+            entities = result.get('ExtractedEntities', {})
+            if entities:
+                print("📋 Extracted data:")
+                print(f"    🤝 Parties: {', '.join(entities.get('Parties', []))}")
+                print(f"    📅 Effective date: {entities.get('EffectiveDate', 'Unknown')}")
+                
+                key_terms = entities.get('KeyTerms', [])
+                if key_terms:
+                    print(f"    📝 Key terms: {len(key_terms)} found")
+                    for i, term in enumerate(key_terms[:2], 1):
+                        print(f"      {i}. {term[:80]}...")
+            
+            print("\n" + "=" * 50)
+            print("✅ Analysis successfully completed! Contract is ready for further review")
+            
+        except json.JSONDecodeError as e:
+            print(f"❌ JSON parsing error: {e}")
+            print("📋 Raw result:")
+            print(response2.text)
+    else:
+        print("❌ Failed to get analysis result")
+        if response2:
+            print(f"📋 Response2 content: {response2}")
+        
+    if response2 and hasattr(response2, 'text') and response2.text:
+        print("\nJSON result:")
+        print(response2.text)
+    else:
+        print("\n❌ No JSON result available")
+        
+except Exception as e:
+    print(f"\n❌ Error during analysis: {e}")
+    import traceback
+    print(f"🔍 Full error traceback:\n{traceback.format_exc()}")
+    
+finally:
+    try:
+        if 'SESSION_ID' in locals():
+            MemorySessionService.delete_session(SESSION_ID)
+            print(f"✅ Session deleted: {SESSION_ID}")
+        if 'uploaded_file' in locals():
+            client.files.delete(name=uploaded_file.name)
+            print(f"✅ File deleted: {uploaded_file.name}")
+    except Exception as e:
+        print(f"⚠️ File already deleted or not uploaded: {e}")
